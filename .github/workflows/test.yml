@@ -9,45 +9,73 @@ defaults:
 jobs:
   test:
 
-    runs-on: ${{ matrix.cfg.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        cfg:
-          - { os: ubuntu-latest, py: "3.10" }
-          - { os: ubuntu-latest, py: 3.11 }
-          - { os: ubuntu-latest, py: 3.12 }
-          - { os: windows-latest, py: 3.12 }
-          - { os: macos-latest, py: 3.12 }
+        os: [
+          macos-latest,
+          ubuntu-latest,
+          windows-latest,
+        ]
+        python-version: [
+          "3.12",
+          "3.13",
+        ]
+        include:   # some more parts of a sparse matrix for older Python
+          - os: ubuntu-latest
+            python-version: "3.10"
+          - os: ubuntu-latest
+            python-version: "3.11"
       fail-fast: false
+
+    env:
+       BUILD_WHEEL: ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12') && 'true' || '' }}
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.cfg.py }}
+    - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.cfg.py }}
+        python-version: ${{ matrix.python-version }}
 
     - name: Install build dependencies [Linux only]
       if: ${{ runner.os == 'Linux' }}
       run: |
         sudo apt-get -y install gcc
 
-    - name: Install Python dependencies
+    - name: Install Python dependencies (test)
       run: |
         python -m pip install --upgrade pip
+        python -m pip install numpy scipy matplotlib scikit-learn pytest pytest-cov
 
-        # For the time being, install these manually
+    - name: Install Python dependencies (build)
+      if: env.BUILD_WHEEL
+      run: |
         python -m pip install build hatchling hatch-vcs
         python -m pip install git+https://github.com/llimeht/hatch-sphinx.git
-
-        python -m pip install numpy scipy matplotlib scikit-learn pytest pytest-cov
 
     - name: Build package [Linux only]
       if: ${{ runner.os == 'Linux' }}
       run: |
         cd bumps/dream
         gcc -I../../Random123/include/ -fopenmp -shared -lm -fPIC compiled.c -o _compiled.so
+
+    - name: Build and install package
+      if: env.BUILD_WHEEL
+      run: |
+        python -m build --no-isolation
+        python -m pip install dist/bumps*whl
+
+    - name: Publish sdist and wheel package
+      if: env.BUILD_WHEEL
+      uses: actions/upload-artifact@v4
+      with:
+        name: bumps-${{ matrix.os }}-${{ matrix.python-version }}
+        path: |
+           dist/bumps*whl
+           dist/bumps*tar*
+        if-no-files-found: ignore
 
     - name: Test with pytest
       run: |
