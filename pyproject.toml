@@ -61,6 +61,10 @@ requires = [
     "hatchling",
     "hatch-sphinx",
     "hatch-vcs",
+    "matplotlib",
+    "numpy",
+    "scikit-learn",
+    "scipy",
 ]
 build-backend = "hatchling.build"
 
